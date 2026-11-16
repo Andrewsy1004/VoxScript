@@ -4,16 +4,9 @@ from __future__ import annotations
 
 import tkinter as tk
 from dataclasses import dataclass
-from tkinter import ttk
 from typing import Callable
 
-# Colores: borde, relleno, título, subtítulo
-_IDLE = ("#9CA3AF", None, "#374151", "#6B7280")
-_HOVER = ("#2563EB", "#F5F8FF", "#1F2937", "#6B7280")
-_DRAG = ("#2563EB", "#E0EBFF", "#1D4ED8", "#1D4ED8")
-_DONE = ("#16A34A", "#F0FDF4", "#166534", "#6B7280")
-_DISABLED = ("#D1D5DB", None, "#9CA3AF", "#9CA3AF")
-_WARN = "#B45309"
+from app.ui.themes import current_theme, window_background
 
 DASH, GAP, LINE = 8, 5, 2
 
@@ -42,10 +35,8 @@ class DropZone(tk.Canvas):
     def __init__(self, master: tk.Misc, on_click: Callable[[], None],
                  dnd_available: bool, height: int = 104,
                  texts: ZoneTexts = ZoneTexts()) -> None:
-        bg = ttk.Style(master).lookup("TFrame", "background") or master.winfo_toplevel().cget("bg")
-        super().__init__(master, height=height, bg=bg, bd=0, highlightthickness=0,
-                         cursor="hand2")
-        self._bg = bg
+        super().__init__(master, height=height, bg=window_background(master), bd=0,
+                         highlightthickness=0, cursor="hand2")
         self._t = texts
         self._on_click = on_click
         self._dnd = dnd_available
@@ -72,6 +63,11 @@ class DropZone(tk.Canvas):
         self.configure(cursor="hand2" if enabled else "arrow")
         self._draw()
 
+    def refresh_theme(self) -> None:
+        """Vuelve a dibujar con los colores del tema activo."""
+        self.configure(bg=window_background(self))
+        self._draw()
+
     # ---------- dibujo ----------
 
     def _set_hover(self, value: bool) -> None:
@@ -94,15 +90,16 @@ class DropZone(tk.Canvas):
                 True)
 
     def _palette(self) -> tuple:
+        theme = current_theme()
         if not self._enabled:
-            return _DISABLED
+            return theme.zone_disabled
         if self._dragging:
-            return _DRAG
+            return theme.zone_drag
         if self._hover:
-            return _HOVER
+            return theme.zone_hover
         if self._file:
-            return _DONE
-        return _IDLE
+            return theme.zone_done
+        return theme.zone_idle
 
     def _draw(self) -> None:
         self.delete("all")
@@ -122,7 +119,7 @@ class DropZone(tk.Canvas):
         title, subtitle, warn = self._texts()
         self.create_text(w / 2, h / 2 - 11, text=title, fill=title_fg,
                          font=("TkDefaultFont", 11, "bold"), width=w - 32)
-        self.create_text(w / 2, h / 2 + 13, text=subtitle, fill=_WARN if warn else sub_fg,
+        self.create_text(w / 2, h / 2 + 13, text=subtitle, fill=current_theme().warn if warn else sub_fg,
                          font=("TkDefaultFont", 9), width=w - 32)
 
     def _dashed(self, ax: float, ay: float, bx: float, by: float, color: str) -> None:

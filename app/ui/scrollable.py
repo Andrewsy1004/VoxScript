@@ -10,6 +10,8 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 
+from app.ui.themes import window_background
+
 # Espacio que se deja para la barra de tareas y el título de la ventana
 SCREEN_MARGIN = 120
 
@@ -20,9 +22,8 @@ class ScrollableFrame(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
-        background = ttk.Style(self).lookup("TFrame", "background") or None
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0,
-                                background=background)
+                                background=window_background(self))
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.scrollbar.grid(row=0, column=1, sticky="ns")
@@ -37,6 +38,9 @@ class ScrollableFrame(ttk.Frame):
         root.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
         root.bind_all("<Button-4>", self._on_mousewheel, add="+")
         root.bind_all("<Button-5>", self._on_mousewheel, add="+")
+
+    def refresh_theme(self) -> None:
+        self.canvas.configure(background=window_background(self))
 
     def _max_height(self) -> int:
         return max(200, self.winfo_screenheight() - SCREEN_MARGIN)

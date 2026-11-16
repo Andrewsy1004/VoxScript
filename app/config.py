@@ -99,6 +99,7 @@ class Settings:
     price_chat_input_per_million: float = DEFAULT_CHAT_INPUT_PER_MILLION
     price_chat_output_per_million: float = DEFAULT_CHAT_OUTPUT_PER_MILLION
     total_spent: float = 0.0  # costo estimado acumulado en este equipo
+    theme: str = "default"    # tema de colores de la interfaz (ver app/ui/themes.py)
 
     def prices(self) -> Prices:
         return Prices(float(self.price_transcription_per_minute),

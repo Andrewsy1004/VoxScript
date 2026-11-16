@@ -33,6 +33,7 @@ from app.documents import SUPPORTED_DOC_EXTENSIONS
 from app.ui.dnd import choose_dropped, create_root, enable_file_drop, split_documents
 from app.ui.drop_zone import DOCUMENT_TEXTS, DropZone
 from app.ui.scrollable import ScrollableFrame
+from app.ui.themes import apply_theme, current_theme, get_theme, style_listbox, style_text
 from app.ui.settings_dialog import SettingsDialog
 
 log = logging.getLogger(__name__)
@@ -69,12 +70,8 @@ class MainWindow:
     # ---------- construcción de la interfaz ----------
 
     def _build(self) -> None:
-        style = ttk.Style(self.root)
-        if sys.platform.startswith("linux"):
-            style.theme_use("clam")
-        style.configure("Title.TLabel", font=("TkDefaultFont", 16, "bold"))
-        style.configure("Muted.TLabel", foreground="#6B7280")
-        style.configure("Primary.TButton", font=("TkDefaultFont", 10, "bold"), padding=(14, 6))
+        # El tema se aplica antes de crear los widgets para que nazcan con sus colores
+        apply_theme(self.root, get_theme(self.settings.theme))
 
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -211,6 +208,7 @@ class MainWindow:
         self.cancel_btn = ttk.Button(actions, text="Cancelar", command=self._cancel, state="disabled")
         self.cancel_btn.pack(side="right", padx=(0, 8))
         self._on_cards_toggled()
+        self._style_classic_widgets()
 
         if self.dnd_available:
             try:
@@ -457,7 +455,7 @@ class MainWindow:
                   text=f"Acumulado en este equipo: {format_usd(self.settings.total_spent)}  ·  "
                        "Estimación; el cobro real está en platform.openai.com/usage"
                   ).grid(row=0, column=0, sticky="w")
-        reset = ttk.Label(footer, text="Reiniciar", foreground="#2563EB", cursor="hand2")
+        reset = ttk.Label(footer, text="Reiniciar", style="Link.TLabel", cursor="hand2")
         reset.grid(row=0, column=1, sticky="e", padx=(8, 0))
         reset.bind("<Button-1>", lambda _e: self._reset_total(report))
 
@@ -488,7 +486,24 @@ class MainWindow:
 
     def _on_settings_saved(self, settings: Settings) -> None:
         self.settings = settings
+        if settings.theme != current_theme().key:
+            self._apply_theme(get_theme(settings.theme))
         self.status_var.set("Configuración guardada.")
+
+    def _apply_theme(self, theme) -> None:
+        """Cambia el tema en vivo, sin reiniciar la app."""
+        apply_theme(self.root, theme)
+        self._style_classic_widgets()
+        self.scroller.refresh_theme()
+        self.drop_zone.refresh_theme()
+        self.docs_zone.refresh_theme()
+
+    def _style_classic_widgets(self) -> None:
+        """Los widgets tk clásicos no siguen el tema ttk: se colorean a mano."""
+        theme = current_theme()
+        style_text(self.context_text, theme)
+        style_text(self.outcomes_text, theme)
+        style_listbox(self.docs_list, theme)
 
     def _open(self, path: Optional[Path]) -> None:
         if path and path.exists():
