@@ -32,6 +32,7 @@ from app.transcription import create_transcriber
 from app.documents import SUPPORTED_DOC_EXTENSIONS
 from app.ui.dnd import choose_dropped, create_root, enable_file_drop, split_documents
 from app.ui.drop_zone import DOCUMENT_TEXTS, DropZone
+from app.ui.scrollable import ScrollableFrame
 from app.ui.settings_dialog import SettingsDialog
 
 log = logging.getLogger(__name__)
@@ -76,7 +77,12 @@ class MainWindow:
         style.configure("Primary.TButton", font=("TkDefaultFont", 10, "bold"), padding=(14, 6))
 
         self.root.columnconfigure(0, weight=1)
-        frm = ttk.Frame(self.root, padding=24)
+        self.root.rowconfigure(0, weight=1)
+        # Scroll para pantallas pequeñas donde no cabe todo el contenido
+        self.scroller = ScrollableFrame(self.root)
+        self.scroller.grid(row=0, column=0, sticky="nsew")
+        self.scroller.inner.columnconfigure(0, weight=1)
+        frm = ttk.Frame(self.scroller.inner, padding=24)
         frm.grid(sticky="nsew")
         frm.columnconfigure(1, weight=1)
 
@@ -208,7 +214,8 @@ class MainWindow:
 
         if self.dnd_available:
             try:
-                enable_file_drop([self.root, frm, file_entry, self.drop_zone], self._on_drop,
+                enable_file_drop([self.root, self.scroller.canvas, self.scroller.inner, frm,
+                                  file_entry, self.drop_zone], self._on_drop,
                                  self._on_drag_enter, self._on_drag_leave)
                 # Zona propia para los documentos de las flashcards
                 enable_file_drop([self.docs_zone, self.docs_list], self._on_docs_drop,
