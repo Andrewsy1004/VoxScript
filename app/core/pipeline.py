@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from app import media
+from app.core.chunk_cache import ChunkCache
 from app.core.costs import (CostLine, CostReport, Prices, TokenUsage, format_minutes,
                             format_tokens)
 from app.core.errors import (CancelledError, ConfigError, DocumentError, MediaError,
@@ -64,11 +65,15 @@ def build_output_path(source: Path, output_dir: Optional[Path], extension: str,
 class TranscriptionPipeline:
     def __init__(self, transcriber: Optional[Transcriber], corrector: Optional[Corrector] = None,
                  flashcards: Optional[FlashcardGenerator] = None,
-                 prices: Prices = Prices()) -> None:
+                 prices: Prices = Prices(), cache: Optional[ChunkCache] = None) -> None:
         self.transcriber = transcriber
         self.corrector = corrector
         self.flashcards = flashcards
         self.prices = prices
+        #: partes ya transcritas en un intento anterior (None = no se guardan)
+        self.cache = cache
+        #: partes de la última ejecución que se reutilizaron sin volver a pagarlas
+        self.reused_parts = 0
         #: costo estimado de la última ejecución, desglosado por paso
         self.cost = CostReport()
         #: avisos no fatales de la última ejecución (p. ej., la corrección falló)
@@ -129,22 +134,42 @@ class TranscriptionPipeline:
                                        work_dir / "partes")
             check_cancel()
 
+            cache_key = self._cache_key(source, language, context, len(chunks))
             texts: list[str] = []
             segments: list[Segment] = []
             span = (transcribe_end - 25) / len(chunks)
             minutes = 0.0
             for i, chunk in enumerate(chunks):
                 label = f" (parte {i + 1} de {len(chunks)})" if len(chunks) > 1 else ""
-                progress(25 + span * i, f"Transcribiendo{label}… puede tardar unos minutos")
-                prompt = build_prompt(context, texts[-1] if texts else None)
-                result = self.transcriber.transcribe(chunk.path, language or None, prompt)
-                minutes += (chunk.duration or (info.duration or 0) / len(chunks)) / 60
+                result = self.cache.get(cache_key, i) if cache_key else None
+                if result is not None:
+                    self.reused_parts += 1
+                    progress(25 + span * i, f"Reutilizando lo ya transcrito{label}…")
+                else:
+                    progress(25 + span * i, f"Transcribiendo{label}… puede tardar unos minutos")
+                    prompt = build_prompt(context, texts[-1] if texts else None)
+                    try:
+                        result = self.transcriber.transcribe(chunk.path, language or None, prompt)
+                    except TranscriptorError as exc:
+                        if cache_key and i > 0:
+                            raise type(exc)(
+                                f"{exc}\n\nLas partes ya transcritas ({i} de {len(chunks)}) "
+                                "quedaron guardadas: al reintentar con el mismo archivo "
+                                "no se vuelven a cobrar.") from exc
+                        raise
+                    minutes += (chunk.duration or (info.duration or 0) / len(chunks)) / 60
+                    if cache_key:
+                        self.cache.put(cache_key, i, result)
                 if result.text:
                     texts.append(result.text)
                 segments += [Segment(s.start + chunk.offset, s.end + chunk.offset, s.text)
                              for s in result.segments]
                 check_cancel()
 
+            if self.reused_parts:
+                self.warnings.append(
+                    f"Se reutilizaron {self.reused_parts} de {len(chunks)} partes transcritas "
+                    "en un intento anterior; no se volvieron a cobrar.")
             self.cost.lines.append(CostLine("Transcripción", format_minutes(minutes),
                                             self.prices.transcription(minutes)))
             if not texts:
@@ -183,6 +208,8 @@ class TranscriptionPipeline:
             progress(correct_end, "Guardando el archivo…")
             out_path = build_output_path(source, output_dir, exporter.extension)
             exporter.export(transcript, out_path, options)
+            if cache_key:
+                self.cache.clear(cache_key)  # ya está en el archivo final
 
             if cards:
                 # La transcripción ya está guardada: si esto falla, solo se avisa.
@@ -243,7 +270,21 @@ class TranscriptionPipeline:
         progress(100, "Listo")
         return self.flashcards_path
 
+    def _cache_key(self, source: Path, language: Optional[str], context: str,
+                   total_parts: int) -> Optional[str]:
+        """Clave de las partes guardadas, o None si no hay caché o no se pudo calcular."""
+        if self.cache is None:
+            return None
+        try:
+            self.cache.prune()
+            return self.cache.key_for(source, model=self.transcriber.model, language=language,
+                                      context=context, total_parts=total_parts)
+        except OSError as exc:
+            log.warning("Sin caché de partes: %s", exc)
+            return None
+
     def _reset(self) -> None:
+        self.reused_parts = 0
         self.warnings = []
         self.flashcards_path, self.flashcards_count = None, 0
         self.cost = CostReport()

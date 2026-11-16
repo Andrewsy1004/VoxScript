@@ -18,7 +18,8 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Optional
 
 from app import APP_NAME, __version__, resource_path
-from app.config import LANGUAGES, Settings, SettingsStore, config_dir
+from app.config import LANGUAGES, Settings, SettingsStore, chunk_cache_dir, config_dir
+from app.core.chunk_cache import ChunkCache
 from app.core.costs import CostReport, format_usd
 from app.core.errors import CancelledError, TranscriptorError
 from app.core.models import ExportOptions
@@ -540,7 +541,8 @@ class MainWindow:
                 pipeline = TranscriptionPipeline(create_transcriber(self.settings),
                                                  create_corrector(self.settings),
                                                  create_flashcard_generator(self.settings),
-                                                 self.settings.prices())
+                                                 self.settings.prices(),
+                                                 cache=ChunkCache(chunk_cache_dir()))
         except TranscriptorError as exc:
             messagebox.showerror(APP_NAME, str(exc))
             return

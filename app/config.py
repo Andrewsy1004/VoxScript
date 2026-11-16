@@ -42,6 +42,11 @@ def config_dir() -> Path:
     return base / APP_NAME
 
 
+def chunk_cache_dir() -> Path:
+    """Partes ya transcritas de trabajos que fallaron a mitad (se reutilizan al reintentar)."""
+    return config_dir() / "partes_pendientes"
+
+
 def app_base_dir() -> Path:
     """Carpeta del ejecutable (si está empaquetado) o raíz del proyecto."""
     if getattr(sys, "frozen", False):

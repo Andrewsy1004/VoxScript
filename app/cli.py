@@ -9,7 +9,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from app.config import SettingsStore, load_env
+from app.config import SettingsStore, chunk_cache_dir, load_env
+from app.core.chunk_cache import ChunkCache
 from app.core.errors import TranscriptorError
 from app.core.models import ExportOptions
 from app.core.pipeline import TranscriptionPipeline
@@ -65,7 +66,8 @@ def main(argv: list[str] | None = None) -> int:
                                           learning_outcomes=args.resultados)
         else:
             pipeline = TranscriptionPipeline(create_transcriber(settings),
-                                             create_corrector(settings), cards, settings.prices())
+                                             create_corrector(settings), cards, settings.prices(),
+                                             cache=ChunkCache(chunk_cache_dir()))
             out = pipeline.run(args.archivo, args.formato, args.salida, args.idioma,
                                ExportOptions(include_timestamps=not args.sin_tiempos), show,
                                context=args.contexto, documents=args.documento,
